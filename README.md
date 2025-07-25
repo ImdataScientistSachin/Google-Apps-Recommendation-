@@ -15,8 +15,7 @@ A Flask web application that recommends similar Google Play Store apps based on 
 
 1. Clone the repository:
    ```
-   git clone https://github.com/yourusername/GoogleAppsRecom.git
-   cd GoogleAppsRecom
+   git clone https://github.com/ImdataScientistSachin/Google-Apps-Recommendation-.git
    ```
 
 2. Create a virtual environment:

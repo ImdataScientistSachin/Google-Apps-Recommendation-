@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+
+{% block content %}
+<main class="container">
+    <!-- Search Section -->
+    <section class="search-section card shadow-sm mb-4">
+        <div class="card-body">
+            <h1 class="text-center mb-3">Google Play Store App Recommender</h1>
+            <p class="subtitle text-center mb-4">Find similar apps based on your favorites</p>
+            <div class="search-box d-flex justify-content-center">
+                <div class="input-group mb-3" style="max-width: 600px;">
+                    <input type="text" id="appNameInput" class="form-control" 
+                           placeholder="Enter an app name (e.g., WhatsApp, Facebook, Instagram)">
+                    <button type="button" id="searchButton" class="btn btn-primary">Search</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Loading State -->
+    <div id="loadingIndicator" class="loading d-none text-center my-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2">Finding similar apps...</p>
+    </div>
+
+    <!-- Error State -->
+    <div id="errorContainer" class="error alert alert-danger d-none"></div>
+
+    <!-- Results Section -->
+    <section id="recommendationsContainer" class="results-section d-none">
+        <h2 id="inputAppName" class="mb-3"></h2>
+        <div id="recommendationsList" class="row"></div>
+    </section>
+    
+    <!-- Popular Apps Section -->
+    <section id="popularAppsSection" class="d-none mb-5">
+        <h3 class="mb-3">Popular Apps</h3>
+        <div id="popularAppsList" class="row"></div>
+    </section>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const appNameInput = document.getElementById('appNameInput');
+        const searchButton = document.getElementById('searchButton');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const recommendationsContainer = document.getElementById('recommendationsContainer');
+        const inputAppName = document.getElementById('inputAppName');
+        const recommendationsList = document.getElementById('recommendationsList');
+        const errorContainer = document.getElementById('errorContainer');
+        const popularAppsSection = document.getElementById('popularAppsSection');
+        const popularAppsList = document.getElementById('popularAppsList');
+        
+        // Event listener for the search button
+        searchButton.addEventListener('click', getRecommendations);
+        
+        // Event listener for the enter key in the input field
+        appNameInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                getRecommendations();
+            }
+        });
+        
+        function getRecommendations() {
+            const appName = appNameInput.value.trim();
+            
+            // Validate input
+            if (!appName) {
+                showError('Please enter an app name');
+                return;
+            }
+            
+            // Reset UI
+            resetUI();
+            
+            // Show loading indicator
+            loadingIndicator.classList.remove('d-none');
+            
+            // Make API request
+            fetch('/api/recommend', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    app_name: appName,
+                    num_recommendations: 10
+                }),
+            })
+            .then(response => {
+                // Parse the JSON response regardless of status code
+                return response.json().then(data => {
+                    return { status: response.status, data: data };
+                });
+            })
+            .then(({ status, data }) => {
+                // Hide loading indicator
+                loadingIndicator.classList.add('d-none');
+                
+                if (data.status === 'error') {
+                    // Show error message
+                    showError(data.message);
+                    
+                    // Show suggestions if available
+                    if (data.suggestions && data.suggestions.length > 0) {
+                        showSuggestions(data.suggestions);
+                    }
+                    
+                    // Show popular apps if available
+                    if (data.popular && data.popular.length > 0) {
+                        showPopularApps(data.popular);
+                    }
+                } else {
+                    // Show recommendations
+                    showRecommendations(appName, data.recommendations);
+                }
+            })
+            .catch(error => {
+                // Hide loading indicator
+                loadingIndicator.classList.add('d-none');
+                
+                // Show more detailed error message
+                let errorMessage = 'An error occurred while fetching recommendations. Please try again.';
+                if (error.message) {
+                    errorMessage += ' (Error: ' + error.message + ')';
+                }
+                showError(errorMessage);
+                console.error('Error details:', error);
+            });
+        }
+        
+        function resetUI() {
+            errorContainer.classList.add('d-none');
+            errorContainer.textContent = '';
+            recommendationsContainer.classList.add('d-none');
+            inputAppName.textContent = '';
+            recommendationsList.innerHTML = '';
+            popularAppsSection.classList.add('d-none');
+            popularAppsList.innerHTML = '';
+        }
+        
+        function showError(message) {
+            errorContainer.textContent = message;
+            errorContainer.classList.remove('d-none');
+        }
+        
+        function showSuggestions(suggestions) {
+            const suggestionHtml = `
+                <div class="mt-3">
+                    <p>Did you mean:</p>
+                    <ul class="list-group">
+                        ${suggestions.map(app => `
+                            <li class="list-group-item suggestion-item" data-app="${app}">
+                                ${app}
+                            </li>
+                        `).join('')}
+                    </ul>
+                </div>
+            `;
+            
+            errorContainer.innerHTML += suggestionHtml;
+            
+            // Add click event listeners to suggestions
+            document.querySelectorAll('.suggestion-item').forEach(item => {
+                item.addEventListener('click', function() {
+                    const app = this.getAttribute('data-app');
+                    appNameInput.value = app;
+                    getRecommendations();
+                });
+            });
+        }
+        
+        function showPopularApps(apps) {
+            popularAppsList.innerHTML = apps.map(app => `
+                <div class="col-md-4 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title">${app.App}</h5>
+                            <p class="card-text">
+                                <span class="badge bg-secondary">${app.Category}</span>
+                                <span class="ms-2">
+                                    <i class="bi bi-star-fill text-warning"></i> ${app.Rating || 'N/A'}
+                                </span>
+                            </p>
+                        </div>
+                        <div class="card-footer bg-transparent">
+                            <button class="btn btn-sm btn-outline-primary search-app" data-app="${app.App}">
+                                Find similar apps
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            
+            popularAppsSection.classList.remove('d-none');
+            
+            // Add click event listeners to app search buttons
+            document.querySelectorAll('.search-app').forEach(button => {
+                button.addEventListener('click', function() {
+                    const app = this.getAttribute('data-app');
+                    appNameInput.value = app;
+                    getRecommendations();
+                });
+            });
+        }
+        
+        function showRecommendations(appName, recommendations) {
+            inputAppName.textContent = `Similar apps to "${appName}"`;
+            
+            recommendationsList.innerHTML = recommendations.map(app => `
+                <div class="col-md-4 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title">${app.App}</h5>
+                            <p class="card-text">
+                                <span class="badge bg-secondary">${app.Category}</span>
+                                <span class="ms-2">
+                                    <i class="bi bi-star-fill text-warning"></i> ${app.Rating || 'N/A'}
+                                </span>
+                            </p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <small class="text-muted">Reviews: ${app.Reviews || 'N/A'}</small>
+                                <div class="match-score">
+                                    <div class="progress" style="width: 100px;">
+                                        <div class="progress-bar bg-success" role="progressbar" 
+                                             style="width: ${Math.round(app.similarity * 100)}%" 
+                                             aria-valuenow="${Math.round(app.similarity * 100)}" 
+                                             aria-valuemin="0" aria-valuemax="100">
+                                        </div>
+                                    </div>
+                                    <small>${Math.round(app.similarity * 100)}% match</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-footer bg-transparent">
+                            <button class="btn btn-sm btn-outline-primary search-app" data-app="${app.App}">
+                                Find similar apps
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            
+            recommendationsContainer.classList.remove('d-none');
+            
+            // Add click event listeners to app search buttons
+            document.querySelectorAll('.search-app').forEach(button => {
+                button.addEventListener('click', function() {
+                    const app = this.getAttribute('data-app');
+                    appNameInput.value = app;
+                    getRecommendations();
+                });
+            });
+        }
+    });
+</script>
+{% endblock %}
+
+<!-- Reviews Modal -->
+<div class="modal fade" id="reviewsModal" tabindex="-1" aria-labelledby="reviewsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="reviewsModalLabel">App Reviews</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="reviewsContainer">
+                    <div id="reviewsLoading" class="text-center">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                    <div id="reviewsError" class="alert alert-danger d-none"></div>
+                    <div id="reviewsList"></div>
+                    <div id="reviewsPagination" class="mt-3"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
